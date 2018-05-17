@@ -102,3 +102,11 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+Include/
+Scripts/
+etc/
+man/
+pip-selfcheck.json
+share/
+tcl/
