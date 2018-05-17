@@ -7,50 +7,79 @@ from keras.utils import np_utils
 import tensorflow as tf
 
 import categorizer
+import normalizer
 
 numpy.random.seed(7)
 
 train_input_file = 'train.csv'
+test_input_file = 'test.csv'
+
+
 # Columnas
 #     0          1       2      3   4   5    6     7     8      9   10      11
 # PassengerId,Survived,Pclass,Name,Sex,Age,SibSp,Parch,Ticket,Fare,Cabin,Embarked
-train_df = pandas.read_csv(train_input_file, usecols=[1, 2, 4, 5, 11])
+train_df = pandas.read_csv(train_input_file, usecols=[2, 4, 5, 11])
 train_ds = train_df.values
 COL_COUNT = train_ds.shape[1]
 
-SURVIVED_COL, PCLASS_COL, SEX_COL, AGE_COL, EMBARK_COL = range(COL_COUNT)
+train_out_values = pandas.read_csv(train_input_file, usecols=[1]).values # valores de salida de entrenamiento
 
-a = train_ds[:,AGE_COL].astype('float32')
-b = numpy.isnan(a)
-c = b == False
-mean_age = a[c].mean()
+# Columnas
+#     0          1     2   3   4   5      6     7     8     9      10  
+# PassengerId,Pclass,Name,Sex,Age,SibSp,Parch,Ticket,Fare,Cabin,Embarked
+test_df = pandas.read_csv(test_input_file, usecols=[1, 3, 4, 10])
+test_ds = test_df.values
+
+PCLASS_COL, SEX_COL, AGE_COL, EMBARK_COL = range(COL_COUNT)
+
+train_size = len(train_ds)
+# junto los datasets de entrenamiento y pruebas para hacer categorizacion y normalizacion coherentes
+temp_ds = numpy.vstack( (train_ds , test_ds) )
+
+def standardize_age(dataset):
+    # reemplazo los valores de edad nan por el promedio de edad
+    __dataset = dataset.copy()
+    a = __dataset[:, AGE_COL].astype('float32')
+    b = numpy.isnan(a)
+    c = b == False
+    mean_age = a[c].mean()
+    a[b] = mean_age
+    __dataset[:, AGE_COL] = a
+    return __dataset
 
 
-train_ds = categorizer.replace_nans(train_ds , AGE_COL , mean_age)
-train_ds , SEX_CATEGORIES = categorizer.categorize_col(train_ds , SEX_COL)
-train_ds , EMBARK_CATEGORIES = categorizer.categorize_col(train_ds , EMBARK_COL)
+temp_ds = standardize_age(temp_ds)
 
+# categorizo el campo sexo
+temp_ds, SEX_CATEGORIES = categorizer.categorize_col(temp_ds, SEX_COL)
+
+# categorizo el campo embarque
+temp_ds, EMBARK_CATEGORIES = categorizer.categorize_col(temp_ds, EMBARK_COL)
+
+temp_ds = temp_ds.astype('float32')
+
+# obtengo una version normalizada del ds
+norm_temp_ds = normalizer.normalize_dataset(temp_ds)
 
 # Parameters
 learning_rate = 0.001
 training_epochs = 15
-batch_size = 1000
+batch_size = 27 # el batch size debe ser multiplo del train_size
 display_step = 1
 
-# Usaremos dos capas ocultas de 256 neuronas cada una
-n_hidden_1 = 256
-n_hidden_2 = 256
+# Usaremos dos capas ocultas
+n_hidden_1 = COL_COUNT
+n_hidden_2 = COL_COUNT
 
-train_in_ds = mnist.train.images  # dataset de entrnamiento de entrada
-train_out_ds = mnist.train.labels  # dataset de entrenamiento de salida o clases
+train_in_ds = norm_temp_ds[:train_size] # valores de entrada de entrenamiento
+train_out_ds = np_utils.to_categorical(train_out_values)  # valores de salida de entrenamiento
 ds_size = len(train_in_ds)
 
-test_in_ds = mnist.test.images  # dataset de pruebas de entrada
-test_out_ds = mnist.test.labels  # dataset de pruebas de salida
+test_in_ds = norm_temp_ds[train_size:]  # valores de entrada de prueba
+# test_out_ds = mnist.test.labels  # dataset de pruebas de salida
 
-# La entrada son imagenes de 28*28 pixeles (tensor de 28*28 elementos)
-n_input = train_in_ds.shape[1]  # es decir, que la capa de entrada tendra 784 neuronas
-n_classes = train_out_ds.shape[1]  # cantidad de clases. En este caso son 10 digitos del 0 al 9
+n_input = COL_COUNT # tamano de la capa de entrada
+n_classes = train_out_ds.shape[1]  # cantidad de clases. En este caso son 0 o 1
 
 
 def build_random_weight_tensor(in_size, out_size):
