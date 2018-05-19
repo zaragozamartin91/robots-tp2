@@ -11,12 +11,16 @@ import normalizer
 
 import sys
 
-argc = len(sys.argv)
 args = sys.argv
 print("args: ", args)
 
+if args[0] == '':
+    args = ['main.py' , 'acc' , 200 , 0.001]
+    
 
-if argc <= 1:
+argc = len(args)
+
+if argc == 1:
     print("""Uso:
     script acc|run [epochs] [learning_rate]
     acc: mide accuracy
@@ -25,6 +29,7 @@ if argc <= 1:
     learning_rate: tasa de aprendizaje. Defecto=0.001
     """)
     sys.exit(0)
+
 arg_idx = 1
 MEASURE_ACCURACY = argc > arg_idx and args[arg_idx] == 'acc'
 arg_idx += 1
@@ -62,19 +67,22 @@ test_size = len(test_ds)
 temp_ds = numpy.vstack((train_ds, test_ds))
 
 
-def standardize_age(dataset):
+def standardize_age(dataset, with_mean=True):
     # reemplazo los valores de edad nan por el promedio de edad
     __dataset = dataset.copy()
     a = __dataset[:, AGE_COL].astype('float32')
     b = numpy.isnan(a)
     c = b == False
     mean_age = a[c].mean()
-    a[b] = mean_age
+    if with_mean:
+        a[b] = mean_age
+    else:
+        a[b] = 0
     __dataset[:, AGE_COL] = a
     return __dataset
 
 
-temp_ds = standardize_age(temp_ds)
+temp_ds = standardize_age(temp_ds , with_mean=True)
 
 # categorizo el campo sexo
 temp_ds, SEX_CATEGORIES = categorizer.categorize_col(temp_ds, SEX_COL)
@@ -120,12 +128,12 @@ n_classes = train_y.shape[1]  # cantidad de clases. En este caso son 0 o 1
 def build_random_weight_tensor(in_size, out_size):
     """ Construye un tensor de in_size * out_size elementos con valores aleatorios siguiendo la distribucion normal.
     Cada valor representa el peso de la entrada 'i' hacia la neurona 'j' (siendo i una fila y j una columna) """
-    return tf.random_normal(shape=[in_size, out_size])
+    return tf.random_normal(shape=[in_size, out_size],seed=17)
 
 
 def build_random_bias_tensor(out_size):
     """ Crea un tensor de umbrales de activacion para una capa de la red neuronal """
-    return tf.random_normal(shape=[out_size])
+    return tf.random_normal(shape=[out_size],seed=13)
 
 
 # NOTAR QUE LOS PESOS Y BIASES SON VARIABLES
@@ -176,7 +184,8 @@ logits = multilayer_perceptron(X)
 # Defino la funcion de perdida y el optimizador que debe minimizar dicha funcion
 loss_op = tf.reduce_mean(
     tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=Y))
-optimizer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE)
+#optimizer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE)
+optimizer = tf.train.GradientDescentOptimizer(learning_rate=LEARNING_RATE)
 train_op = optimizer.minimize(loss_op)
 
 # Esta funcion define un step u operacion de tensorflow que inicializara variables (los tf.Variable)
@@ -185,7 +194,7 @@ init_op = tf.global_variables_initializer()
 # ENTRENAMIENTO DE LA RED -------------------------------------------------------------------
 
 # Parameters
-batch_size = 27  # el batch size debe ser multiplo del train_size
+batch_size = 5  # el batch size debe ser multiplo del train_size
 display_step = 1
 
 
