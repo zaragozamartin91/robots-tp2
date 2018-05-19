@@ -110,3 +110,7 @@ man/
 pip-selfcheck.json
 share/
 tcl/
+bin/
+include/
+.vscode/
+out.txt
