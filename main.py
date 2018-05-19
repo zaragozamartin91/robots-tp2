@@ -14,7 +14,6 @@ numpy.random.seed(7)
 train_input_file = 'train.csv'
 test_input_file = 'test.csv'
 
-
 # Columnas
 #     0          1       2      3   4   5    6     7     8      9   10      11
 # PassengerId,Survived,Pclass,Name,Sex,Age,SibSp,Parch,Ticket,Fare,Cabin,Embarked
@@ -22,19 +21,23 @@ train_df = pandas.read_csv(train_input_file, usecols=[2, 4, 5, 11])
 train_ds = train_df.values
 COL_COUNT = train_ds.shape[1]
 
-train_out_values = pandas.read_csv(train_input_file, usecols=[1]).values # valores de salida de entrenamiento
+# valores de salida de entrenamiento
+train_out_values = pandas.read_csv(train_input_file, usecols=[1]).values  
 
 # Columnas
-#     0          1     2   3   4   5      6     7     8     9      10  
+#     0          1     2   3   4   5      6     7     8     9      10
 # PassengerId,Pclass,Name,Sex,Age,SibSp,Parch,Ticket,Fare,Cabin,Embarked
 test_df = pandas.read_csv(test_input_file, usecols=[1, 3, 4, 10])
 test_ds = test_df.values
 
 PCLASS_COL, SEX_COL, AGE_COL, EMBARK_COL = range(COL_COUNT)
 
+
 train_size = len(train_ds)
+test_size = len(test_ds)
 # junto los datasets de entrenamiento y pruebas para hacer categorizacion y normalizacion coherentes
-temp_ds = numpy.vstack( (train_ds , test_ds) )
+temp_ds = numpy.vstack((train_ds, test_ds))
+
 
 def standardize_age(dataset):
     # reemplazo los valores de edad nan por el promedio de edad
@@ -61,25 +64,35 @@ temp_ds = temp_ds.astype('float32')
 # obtengo una version normalizada del ds
 norm_temp_ds = normalizer.normalize_dataset(temp_ds)
 
-# Parameters
-learning_rate = 0.001
-training_epochs = 15
-batch_size = 27 # el batch size debe ser multiplo del train_size
-display_step = 1
 
 # Usaremos dos capas ocultas
 n_hidden_1 = COL_COUNT
 n_hidden_2 = COL_COUNT
 
-train_in_ds = norm_temp_ds[:train_size] # valores de entrada de entrenamiento
-train_out_ds = np_utils.to_categorical(train_out_values)  # valores de salida de entrenamiento
-ds_size = len(train_in_ds)
+# Bandera o flag para medir la precision del modelo
+MEASURE_ACCURACY = True
 
-test_in_ds = norm_temp_ds[train_size:]  # valores de entrada de prueba
-# test_out_ds = mnist.test.labels  # dataset de pruebas de salida
+if MEASURE_ACCURACY:
+    test_size = 50
+    train_size = train_size - test_size    
 
-n_input = COL_COUNT # tamano de la capa de entrada
-n_classes = train_out_ds.shape[1]  # cantidad de clases. En este caso son 0 o 1
+train_lower_limit = 0
+train_upper_limit = train_size
+test_lower_limit = train_upper_limit
+test_upper_limit = test_lower_limit + test_size
+
+
+train_x = norm_temp_ds[train_lower_limit:train_upper_limit]  # valores de entrada de entrenamiento
+train_y = np_utils.to_categorical(train_out_values)[train_lower_limit:train_upper_limit]  # valores de salida de entrenamiento
+
+test_x = norm_temp_ds[test_lower_limit:test_upper_limit]  # valores de entrada de prueba
+test_y = None
+if MEASURE_ACCURACY:
+    test_y = np_utils.to_categorical(train_out_values)[test_lower_limit:test_upper_limit]
+
+
+n_input = train_x.shape[1]  # tamano de la capa de entrada
+n_classes = train_y.shape[1]  # cantidad de clases. En este caso son 0 o 1
 
 
 def build_random_weight_tensor(in_size, out_size):
@@ -103,7 +116,8 @@ def build_random_bias_tensor(out_size):
 # hidden_3 representa los pesos de las salidas de hidden_2 con la salida
 weights = {
     'hidden_1': tf.Variable(build_random_weight_tensor(n_input, n_hidden_1)),
-    'hidden_2': tf.Variable(build_random_weight_tensor(n_hidden_1, n_hidden_2)),
+    'hidden_2': tf.Variable(
+        build_random_weight_tensor(n_hidden_1, n_hidden_2)),
     'out': tf.Variable(build_random_weight_tensor(n_hidden_2, n_classes))
 }
 
@@ -137,8 +151,10 @@ Y = tf.placeholder("float", [None, n_classes])
 # Construct model
 logits = multilayer_perceptron(X)
 
+learning_rate = 0.001
 # Defino la funcion de perdida y el optimizador que debe minimizar dicha funcion
-loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=Y))
+loss_op = tf.reduce_mean(
+    tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=Y))
 optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
 train_op = optimizer.minimize(loss_op)
 
@@ -146,10 +162,17 @@ train_op = optimizer.minimize(loss_op)
 init_op = tf.global_variables_initializer()
 
 
-def next_batch(input_ds, output_ds, batch_idx):
+# ENTRENAMIENTO DE LA RED -------------------------------------------------------------------
+
+# Parameters
+training_epochs = 15
+batch_size = 27  # el batch size debe ser multiplo del train_size
+display_step = 1
+
+def next_batch(X, Y, batch_idx):
     start_idx = batch_idx * batch_size
     end_idx = start_idx + batch_size
-    return (input_ds[start_idx:end_idx], output_ds[start_idx:end_idx])
+    return (X[start_idx:end_idx], Y[start_idx:end_idx])
 
 
 sess = tf.Session()
@@ -158,13 +181,17 @@ sess.run(init_op)
 # Training cycle
 for epoch in range(training_epochs):
     avg_cost = 0.0
-    batch_count = int(ds_size / batch_size)
+    batch_count = int(train_size / batch_size)
     # Loop over all batches
     for batch_idx in range(batch_count):
-        batch_x, batch_y = next_batch(train_in_ds, train_out_ds, batch_idx)
+        batch_x, batch_y = next_batch(train_x, train_y, batch_idx)
         #batch_x, batch_y = mnist.train.next_batch(batch_size)
         # Run optimization op (backprop) and cost op (to get loss value)
-        _, cost = sess.run([train_op, loss_op], feed_dict={X: batch_x, Y: batch_y})
+        _, cost = sess.run(
+            [train_op, loss_op], feed_dict={
+                X: batch_x,
+                Y: batch_y
+            })
         # Compute average loss
         avg_cost += cost / batch_count
     # Display logs per epoch step
@@ -173,12 +200,20 @@ for epoch in range(training_epochs):
 
 print("Optimization Finished!")
 
+
 # Test model
 pred = tf.nn.softmax(logits)  # Apply softmax to logits
-correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(Y, 1))
-# Calculate accuracy
-accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-acc_value = sess.run(accuracy, feed_dict={X: test_in_ds, Y: test_out_ds})
-print("Accuracy:", acc_value)
+predicted_category_op = tf.argmax(pred, 1)
+
+if MEASURE_ACCURACY:
+    expected_category_op = tf.argmax(Y, 1)
+    correct_prediction = tf.equal(predicted_category_op, expected_category_op)
+    # Calculate accuracy
+    accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+    acc_value = sess.run(accuracy, feed_dict={X: test_x, Y: test_y})
+    print("Accuracy:", acc_value)
+else:
+    predicted_values = sess.run(predicted_category_op , feed_dict={X: test_x})
+    print("Predicted values: " , predicted_values)
 
 sess.close()
