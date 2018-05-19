@@ -9,6 +9,30 @@ import tensorflow as tf
 import categorizer
 import normalizer
 
+import sys
+
+argc = len(sys.argv)
+args = sys.argv
+print("args: ", args)
+
+
+if argc <= 1:
+    print("""Uso:
+    script acc|run [epochs] [learning_rate]
+    acc: mide accuracy
+    run: corre el modelo
+    epochs: cantidad de epochs de entrenamiento. Defecto=15
+    learning_rate: tasa de aprendizaje. Defecto=0.001
+    """)
+    sys.exit(0)
+arg_idx = 1
+MEASURE_ACCURACY = argc > arg_idx and args[arg_idx] == 'acc'
+arg_idx += 1
+TRAINING_EPOCHS = int(args[arg_idx]) if argc > arg_idx else 15
+arg_idx += 1
+LEARNING_RATE = float(args[arg_idx]) if argc > arg_idx else 0.001
+
+
 numpy.random.seed(7)
 
 train_input_file = 'train.csv'
@@ -22,7 +46,7 @@ train_ds = train_df.values
 COL_COUNT = train_ds.shape[1]
 
 # valores de salida de entrenamiento
-train_out_values = pandas.read_csv(train_input_file, usecols=[1]).values  
+train_out_values = pandas.read_csv(train_input_file, usecols=[1]).values
 
 # Columnas
 #     0          1     2   3   4   5      6     7     8     9      10
@@ -31,7 +55,6 @@ test_df = pandas.read_csv(test_input_file, usecols=[1, 3, 4, 10])
 test_ds = test_df.values
 
 PCLASS_COL, SEX_COL, AGE_COL, EMBARK_COL = range(COL_COUNT)
-
 
 train_size = len(train_ds)
 test_size = len(test_ds)
@@ -64,32 +87,31 @@ temp_ds = temp_ds.astype('float32')
 # obtengo una version normalizada del ds
 norm_temp_ds = normalizer.normalize_dataset(temp_ds)
 
-
 # Usaremos dos capas ocultas
 n_hidden_1 = COL_COUNT
 n_hidden_2 = COL_COUNT
 
-# Bandera o flag para medir la precision del modelo
-MEASURE_ACCURACY = True
-
 if MEASURE_ACCURACY:
-    test_size = 50
-    train_size = train_size - test_size    
+    test_size = int(train_size * 0.33) 
+    train_size = train_size - test_size
 
 train_lower_limit = 0
 train_upper_limit = train_size
 test_lower_limit = train_upper_limit
 test_upper_limit = test_lower_limit + test_size
 
+# valores de entrada de entrenamiento
+train_x = norm_temp_ds[train_lower_limit:train_upper_limit]
+# valores de salida de entrenamiento
+train_y = np_utils.to_categorical(train_out_values)[train_lower_limit:train_upper_limit]  
+# valores de entrada de prueba
+test_x = norm_temp_ds[test_lower_limit:test_upper_limit]  
 
-train_x = norm_temp_ds[train_lower_limit:train_upper_limit]  # valores de entrada de entrenamiento
-train_y = np_utils.to_categorical(train_out_values)[train_lower_limit:train_upper_limit]  # valores de salida de entrenamiento
-
-test_x = norm_temp_ds[test_lower_limit:test_upper_limit]  # valores de entrada de prueba
+# Si el switch de medidor de precision esta activado entonces usamos parte de los registros
+# de entrenamiento como parametro para obtner la precision
 test_y = None
 if MEASURE_ACCURACY:
     test_y = np_utils.to_categorical(train_out_values)[test_lower_limit:test_upper_limit]
-
 
 n_input = train_x.shape[1]  # tamano de la capa de entrada
 n_classes = train_y.shape[1]  # cantidad de clases. En este caso son 0 o 1
@@ -151,23 +173,21 @@ Y = tf.placeholder("float", [None, n_classes])
 # Construct model
 logits = multilayer_perceptron(X)
 
-learning_rate = 0.001
 # Defino la funcion de perdida y el optimizador que debe minimizar dicha funcion
 loss_op = tf.reduce_mean(
     tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=Y))
-optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+optimizer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE)
 train_op = optimizer.minimize(loss_op)
 
 # Esta funcion define un step u operacion de tensorflow que inicializara variables (los tf.Variable)
 init_op = tf.global_variables_initializer()
 
-
 # ENTRENAMIENTO DE LA RED -------------------------------------------------------------------
 
 # Parameters
-training_epochs = 15
 batch_size = 27  # el batch size debe ser multiplo del train_size
 display_step = 1
+
 
 def next_batch(X, Y, batch_idx):
     start_idx = batch_idx * batch_size
@@ -179,7 +199,7 @@ sess = tf.Session()
 
 sess.run(init_op)
 # Training cycle
-for epoch in range(training_epochs):
+for epoch in range(TRAINING_EPOCHS):
     avg_cost = 0.0
     batch_count = int(train_size / batch_size)
     # Loop over all batches
@@ -200,7 +220,6 @@ for epoch in range(training_epochs):
 
 print("Optimization Finished!")
 
-
 # Test model
 pred = tf.nn.softmax(logits)  # Apply softmax to logits
 predicted_category_op = tf.argmax(pred, 1)
@@ -213,7 +232,8 @@ if MEASURE_ACCURACY:
     acc_value = sess.run(accuracy, feed_dict={X: test_x, Y: test_y})
     print("Accuracy:", acc_value)
 else:
-    predicted_values = sess.run(predicted_category_op , feed_dict={X: test_x})
-    print("Predicted values: " , predicted_values)
+    predicted_values = sess.run(predicted_category_op, feed_dict={X: test_x})
+    print("Predicted values")
+    for p_value in predicted_values: print(p_value)
 
 sess.close()
