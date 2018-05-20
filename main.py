@@ -46,7 +46,7 @@ test_input_file = 'test.csv'
 # Columnas
 #     0          1       2      3   4   5    6     7     8      9   10      11
 # PassengerId,Survived,Pclass,Name,Sex,Age,SibSp,Parch,Ticket,Fare,Cabin,Embarked
-train_df = pandas.read_csv(train_input_file, usecols=[2, 4, 5, 11])
+train_df = pandas.read_csv(train_input_file, usecols=[2, 4, 5 , 6 , 7])
 train_ds = train_df.values
 COL_COUNT = train_ds.shape[1]
 
@@ -56,10 +56,11 @@ train_out_values = pandas.read_csv(train_input_file, usecols=[1]).values
 # Columnas
 #     0          1     2   3   4   5      6     7     8     9      10
 # PassengerId,Pclass,Name,Sex,Age,SibSp,Parch,Ticket,Fare,Cabin,Embarked
-test_df = pandas.read_csv(test_input_file, usecols=[1, 3, 4, 10])
+test_df = pandas.read_csv(test_input_file, usecols=[1, 3, 4, 5, 6])
 test_ds = test_df.values
 
-PCLASS_COL, SEX_COL, AGE_COL, EMBARK_COL = range(COL_COUNT)
+# Indices de columnas de los datos de entrada
+PCLASS_COL, SEX_COL, AGE_COL, SIB_COL , PARCH_COL = range(COL_COUNT)
 
 train_size = len(train_ds)
 test_size = len(test_ds)
@@ -88,7 +89,13 @@ temp_ds = standardize_age(temp_ds , with_mean=True)
 temp_ds, SEX_CATEGORIES = categorizer.categorize_col(temp_ds, SEX_COL)
 
 # categorizo el campo embarque
-temp_ds, EMBARK_CATEGORIES = categorizer.categorize_col(temp_ds, EMBARK_COL)
+#temp_ds, EMBARK_CATEGORIES = categorizer.categorize_col(temp_ds, EMBARK_COL)
+
+# categorizo el campo SIBLINGS
+temp_ds, SIB_CATEGORIES = categorizer.categorize_col(temp_ds, SIB_COL)
+
+# categorizo el campo parch
+temp_ds, PARCH_CATEGORIES = categorizer.categorize_col(temp_ds, PARCH_COL)
 
 temp_ds = temp_ds.astype('float32')
 
